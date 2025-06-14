@@ -1,0 +1,1 @@
+idf_component_register(SRCS "main.cpp" "led.hpp" "one_wire.hpp" "display.hpp" INCLUDE_DIRS ".")
