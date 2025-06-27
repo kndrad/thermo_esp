@@ -10,6 +10,7 @@
 #include "soc/gpio_num.h"
 
 namespace onewire {
+static const gpio_num_t DEFAULT_GPIO_NUM = GPIO_NUM_4;
 
 class Bus {
   public:

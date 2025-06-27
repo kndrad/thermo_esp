@@ -1,0 +1,1 @@
+sudo cp --update=none /home/kndrad/.espressif/tools/openocd-esp32/v0.12.0-esp32-20241016/openocd-esp32/share/openocd/contrib/60-openocd.rules /etc/udev/rules.d

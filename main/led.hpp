@@ -30,7 +30,7 @@ void blink_n(const std::vector<gpio_num_t>& pins, int n = 5) {
     }
 }
 
-void configure(const gpio_num_t pin) {
+void set_pin(const gpio_num_t pin) {
     gpio_config_t config{
         .pin_bit_mask = (1ULL << pin),
         .mode         = GPIO_MODE_OUTPUT,
@@ -41,9 +41,9 @@ void configure(const gpio_num_t pin) {
     ESP_ERROR_CHECK(gpio_config(&config));
 }
 
-void configure(std::vector<gpio_num_t>& pins) {
+void set_pin(std::vector<gpio_num_t>& pins) {
     for (const auto& pin : pins) {
-        configure(pin);
+        set_pin(pin);
     }
 }
 };  // namespace led
