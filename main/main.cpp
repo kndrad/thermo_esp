@@ -1,3 +1,5 @@
+#include <time.h>
+
 #include "FreeRTOSConfig.h"  // IWYU pragma: keep
 #include "driver/gpio.h"
 #include "esp_log.h"
@@ -5,6 +7,8 @@
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
 #include "one_wire.hpp"
+
+#include <sys/time.h>
 
 static const char* TAG = "MAIN";
 
@@ -24,11 +28,11 @@ const uint8_t LCD_ENTRYMODESET        = 0x04;
 const uint8_t LCD_ENTRYLEFT           = 0x02;
 const uint8_t LCD_ENTRYSHIFTDECREMENT = 0x00;
 
-const uint8_t LCD_CLEARDISPLAY = 0x01;
-const uint8_t LCD_RETURNHOME   = 0x02;
-const uint8_t LCD_SETDDRAMADDR = 0x80;
+const uint8_t LCD_CLEARDISPLAY   = 0x01;
+const uint8_t LCD_RETURNHOME     = 0x02;
+const uint8_t LCD_SET_DDRAM_ADDR = 0x80;
 
-const uint8_t function_set = LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS;
+const uint8_t functionSet = LCD_4BITMODE | LCD_2LINE | LCD_5x8DOTS;
 
 /*
 4-bit parallel communication with the HD44780 LCD controller.
@@ -41,12 +45,12 @@ Register Select (RS) - Set 0 for READING INSTRUCTIONS (IR) or 1 for WRITING DATA
 controller
 */
 const gpio_num_t LCD_EN = GPIO_NUM_19;  // LCD Enable (pulsed high and low)
-const gpio_num_t LCD_RS = GPIO_NUM_18;  // LCD RS signal (0 for IR, 1 for DR)
+const gpio_num_t LCD_RS = GPIO_NUM_18;  // LCD RS signal (0 for IR, 1 for DR)4
 
-const gpio_num_t LCD_DB7 = GPIO_NUM_14;  // LCD DATA BIT 7
-const gpio_num_t LCD_DB6 = GPIO_NUM_27;  // LCD DATA BIT 6
+const gpio_num_t LCD_DB7 = GPIO_NUM_21;  // LCD DATA BIT 7
+const gpio_num_t LCD_DB6 = GPIO_NUM_25;  // LCD DATA BIT 6
 const gpio_num_t LCD_DB5 = GPIO_NUM_26;  // LCD DATA BIT 5
-const gpio_num_t LCD_DB4 = GPIO_NUM_25;  // LCD DATA BIT 4
+const gpio_num_t LCD_DB4 = GPIO_NUM_27;  // LCD DATA BIT 4
 
 const gpio_num_t LCD_ADC0_BTN = GPIO_NUM_36;  // LCD: ADC_CH0 for keypad buttons)
 
@@ -71,7 +75,7 @@ void setup_pins() {
                                .intr_type    = GPIO_INTR_DISABLE};
     gpio_config_t adc_pin   = {.pin_bit_mask = (1ULL << LCD_ADC0_BTN),
                                .mode         = GPIO_MODE_INPUT,
-                               .pull_up_en   = GPIO_PULLUP_ENABLE,
+                               .pull_up_en   = GPIO_PULLUP_DISABLE,
                                .pull_down_en = GPIO_PULLDOWN_DISABLE,
                                .intr_type    = GPIO_INTR_DISABLE};
     gpio_config_t backlight = {.pin_bit_mask = (1ULL << LCD_BACKLIGHT),
@@ -132,25 +136,31 @@ void write(uint8_t value) {
 }
 
 void write_char(char c) {
-    write((uint8_t)c);
+    uint8_t value = (uint8_t)c;
+    write(value);
 }
 
-void write_str(const char* str) {
+void write_string(const char* str) {
     while (*str) {
         write_char(*str++);
     }
 }
 
-void set_cursor(uint8_t col, uint8_t row) {
-    uint8_t address = 0;
+struct Position {
+    uint8_t col;
+    uint8_t row;
 
-    if (row == 0) {
-        address = 0x00 + col;  // First line starts at 0x00
-    } else if (row == 1) {
-        address = 0x40 + col;  // Second line starts at 0x40
+    uint8_t address() const {
+        if (row == 0) {
+            return 0x00 + col;  // First line starts at 0x00
+        }
+        return 0x40 + col;  // Second line starts at 0x40
     }
+};
 
-    send_command(LCD_SETDDRAMADDR | address);
+void set_cursor(const Position& pos) {
+    uint8_t addr = pos.address();
+    send_command(LCD_SET_DDRAM_ADDR | addr);
 }
 
 // HD44780 datasheet Figure 24 - 4-bit initialization sequence
@@ -175,7 +185,7 @@ void init() {
     esp_rom_delay_us(150);  // Wait > 100μs
 
     // 4-bit mode
-    send_command(LCD_FUNCTIONSET | function_set);  // 4-bit, 2-line, 5x8
+    send_command(LCD_FUNCTIONSET | functionSet);  // 4-bit, 2-line, 5x8
     esp_rom_delay_us(50);
 
     send_command(LCD_DISPLAYCONTROL | LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF);
@@ -200,6 +210,33 @@ void command_home() {
     vTaskDelay(pdMS_TO_TICKS(2));  // takes time
 }
 
+void display_temperature(onewire::DS18B20 sensor) {
+    float temperature;
+    char row0[] = "%.2f";
+    char temp_buf[64];  // first line
+
+    temperature = sensor.read_temperature();
+    sprintf(temp_buf, row0, temperature);
+
+    time_t now;
+    struct tm timeinfo;
+    char time_buf[64];  // second line
+
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    strftime(time_buf, sizeof(time_buf), "%H%M%S %d%m%Y", &timeinfo);
+
+    // write temp on line 1
+    set_cursor({0, 0});
+    write_string(temp_buf);
+    write(0xDF);
+    write_char('C');
+
+    // write time on line 2
+    set_cursor({0, 1});
+    write_string(time_buf);
+}
+
 extern "C" void app_main(void) {
     ESP_LOGI(TAG, "=== LCD TEST STARTED ===");
 
@@ -216,16 +253,7 @@ extern "C" void app_main(void) {
     vTaskDelay(pdMS_TO_TICKS(500));
 
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-
-        float temp = sensor.read_temperature();
-        ESP_LOGI(TAG, "Temperature: %.3f°C", temp);
-
-        char str[] = "TEMP: %.3f C";
-        char str2[100];
-        sprintf(str2, str, temp);
-        set_cursor(0, 0);
-
-        write_str(str2);
+        display_temperature(sensor);
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
