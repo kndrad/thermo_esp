@@ -1,12 +1,8 @@
 
 #include <ctime>
 
-#include <time.h>
-
 #include "FreeRTOSConfig.h"  // IWYU pragma: keep
-#include "driver/gpio.h"
 #include "esp_log.h"
-#include "esp_system.h"
 #include "freertos/FreeRTOS.h"  // IWYU pragma: keep
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
