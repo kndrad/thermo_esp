@@ -66,7 +66,8 @@ class HD44780 {
     void set_cursor(const CursorPosition& pos) const;
     void clear_display();
     void return_home();
-    void print_float(float value) const;
+    void print_temperature(float value) const;
+    void print_uint8(uint8_t value) const;
 
   private:
     void init() const;

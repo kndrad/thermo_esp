@@ -237,30 +237,19 @@ void HD44780::return_home() {
     vTaskDelay(pdMS_TO_TICKS(2));
 }
 
-void HD44780::print_float(float value) const {
-    char stringf_buf[] = "%.2f";
-    char line1[64];
-    sprintf(line1, stringf_buf, value);
-
-    setenv("TZ", "UTC+2", 1);
-    tzset();
-    time_t now;
-    char line2[64];
-    struct tm* timeinfo;
-
-    time(&now);
-    timeinfo = localtime(&now);
-    localtime_r(&now, timeinfo);
-    strftime(line2, sizeof(line2), "%H%M%S %d%m%Y", timeinfo);
-
-    set_cursor({0, 0});  // line 1
-    print_string(line1);
+void HD44780::print_temperature(float value) const {
+    char buf[] = "%.2f";
+    char line[64];
+    sprintf(line, buf, value);
+    print_string(line);
     dr(0xDF);
     print_char('C');
+}
 
-    set_cursor({0, 1});  // line 2
-    print_string(line2);
-
-    ESP_LOGI(TAG, "%s %s", line1, line2);
+void HD44780::print_uint8(uint8_t value) const {
+    char buf[] = "%d";
+    char line[64];
+    sprintf(line, buf, value);
+    print_string(line);
 }
 };  // namespace lcd
